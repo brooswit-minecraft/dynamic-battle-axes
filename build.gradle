@@ -75,6 +75,15 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    // Without this, `src/test` has no NeoForge/Minecraft classes on its
+    // compile classpath at all (Tier, AxeItem, DeferredItem, DataComponents,
+    // etc.), which is exactly what the unit tests under
+    // src/test/java/.../dynamicbattleaxes need.
+    unitTest {
+        enable()
+        testedMod = mods.named(mod_id)
+    }
 }
 
 dependencies {
