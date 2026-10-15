@@ -27,12 +27,18 @@ public class DynamicBattleAxesMod {
     /** One registration per {@link BattleAxeMaterial}, keyed by material for lookup in tests and the creative tab. */
     public static final Map<BattleAxeMaterial, DeferredItem<BattleAxeItem>> BATTLE_AXES = registerBattleAxes();
 
+    /**
+     * No {@code .attributes(...)} call: this registers each item with no
+     * attack-damage/attack-speed modifiers at all (the default empty
+     * {@code ItemAttributeModifiers}), so no combat value is enacted here.
+     * {@link BattleAxeMaterial}'s baseline numbers are non-binding evidence
+     * for a future balance task, not inputs to this registration.
+     */
     private static Map<BattleAxeMaterial, DeferredItem<BattleAxeItem>> registerBattleAxes() {
         Map<BattleAxeMaterial, DeferredItem<BattleAxeItem>> axes = new EnumMap<>(BattleAxeMaterial.class);
         for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
-            axes.put(material, ITEMS.register(material.itemId(), () -> new BattleAxeItem(material.tier(),
-                    new Item.Properties().attributes(BattleAxeItem.createAttributes(
-                            material.tier(), material.attackDamageBaseline(), material.attackSpeedBaseline())))));
+            axes.put(material, ITEMS.register(material.itemId(),
+                    () -> new BattleAxeItem(material.tier(), new Item.Properties())));
         }
         return axes;
     }

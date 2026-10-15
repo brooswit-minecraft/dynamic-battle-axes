@@ -1,7 +1,9 @@
 package io.github.brooswitminecraft.dynamicbattleaxes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -22,30 +24,6 @@ class BattleAxeMaterialTest {
     }
 
     @Test
-    void sixMaterialsReuseVanillaAxeDamageAndSpeedVerbatim() {
-        // Same baseline numbers vanilla Items.java passes to AxeItem.createAttributes
-        // for the same-material vanilla axe -- no new balance decision made here.
-        assertEquals(6.0F, BattleAxeMaterial.WOOD.attackDamageBaseline());
-        assertEquals(-3.2F, BattleAxeMaterial.WOOD.attackSpeedBaseline());
-        assertEquals(7.0F, BattleAxeMaterial.STONE.attackDamageBaseline());
-        assertEquals(-3.2F, BattleAxeMaterial.STONE.attackSpeedBaseline());
-        assertEquals(6.0F, BattleAxeMaterial.IRON.attackDamageBaseline());
-        assertEquals(-3.1F, BattleAxeMaterial.IRON.attackSpeedBaseline());
-        assertEquals(6.0F, BattleAxeMaterial.GOLD.attackDamageBaseline());
-        assertEquals(-3.0F, BattleAxeMaterial.GOLD.attackSpeedBaseline());
-        assertEquals(5.0F, BattleAxeMaterial.DIAMOND.attackDamageBaseline());
-        assertEquals(-3.0F, BattleAxeMaterial.DIAMOND.attackSpeedBaseline());
-        assertEquals(5.0F, BattleAxeMaterial.NETHERITE.attackDamageBaseline());
-        assertEquals(-3.0F, BattleAxeMaterial.NETHERITE.attackSpeedBaseline());
-    }
-
-    @Test
-    void copperBaselineIsTheMidpointOfStoneAndIron() {
-        assertEquals(6.5F, BattleAxeMaterial.COPPER.attackDamageBaseline());
-        assertEquals(-3.15F, BattleAxeMaterial.COPPER.attackSpeedBaseline(), 0.0001F);
-    }
-
-    @Test
     void sixMaterialsUseTheirMatchingVanillaTier() {
         assertEquals(Tiers.WOOD, BattleAxeMaterial.WOOD.tier());
         assertEquals(Tiers.STONE, BattleAxeMaterial.STONE.tier());
@@ -59,5 +37,34 @@ class BattleAxeMaterialTest {
     void copperUsesTheDedicatedNonVanillaTier() {
         assertNotNull(BattleAxeMaterial.COPPER.tier());
         assertEquals(BattleAxeTiers.COPPER, BattleAxeMaterial.COPPER.tier());
+    }
+
+    @Test
+    void copperTierHasNoCombatAttackDamageBonus() {
+        // The only Tier field that feeds combat math; must stay neutral since
+        // MINECRAFT-294 enacts no combat balance for any material.
+        assertEquals(0.0F, BattleAxeTiers.COPPER.getAttackDamageBonus());
+    }
+
+    @Test
+    void sameMaterialSwordDamageMatchesVanillaForMaterialsThatHaveOne() {
+        assertEquals(4, BattleAxeMaterial.WOOD.sameMaterialSwordDamage().getAsInt());
+        assertEquals(5, BattleAxeMaterial.STONE.sameMaterialSwordDamage().getAsInt());
+        assertEquals(6, BattleAxeMaterial.IRON.sameMaterialSwordDamage().getAsInt());
+        assertEquals(4, BattleAxeMaterial.GOLD.sameMaterialSwordDamage().getAsInt());
+        assertEquals(7, BattleAxeMaterial.DIAMOND.sameMaterialSwordDamage().getAsInt());
+        assertEquals(8, BattleAxeMaterial.NETHERITE.sameMaterialSwordDamage().getAsInt());
+    }
+
+    @Test
+    void copperHasNoSameMaterialSwordComparisonBecauseVanillaHasNone() {
+        assertFalse(BattleAxeMaterial.COPPER.sameMaterialSwordDamage().isPresent());
+    }
+
+    @Test
+    void reachIsAnUnstatedUnknownForEveryMaterial() {
+        for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
+            assertTrue(material.proposedReach().isEmpty(), material.name());
+        }
     }
 }
