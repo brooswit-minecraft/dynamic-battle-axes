@@ -42,8 +42,11 @@ public class DynamicBattleAxesMod {
      * {@code ItemAttributeModifiers}), so no combat value is enacted here.
      * {@link BattleAxeMaterial}'s evidence methods are non-binding
      * documentation for a future balance task, not inputs to this factory.
-     * Package-private so the test suite can exercise this exact factory
-     * instead of constructing a separate item of its own.
+     * Package-private: {@code DynamicBattleAxesModTest} reaches this exact
+     * factory through {@code BATTLE_AXES}'s real, registered
+     * {@code DeferredItem}s rather than calling it a second time directly
+     * -- constructing a second {@code Item} once the registry has already
+     * frozen (as it has by the time tests run) would itself throw.
      */
     static BattleAxeItem createBattleAxe(BattleAxeMaterial material) {
         return new BattleAxeItem(material.tier(), new Item.Properties());

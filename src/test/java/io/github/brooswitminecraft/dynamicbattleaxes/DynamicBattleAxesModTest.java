@@ -14,15 +14,18 @@ import net.minecraft.world.item.component.ItemAttributeModifiers;
  * or attack-speed modifier. Regressing this (e.g. a future change that adds
  * {@code .attributes(...)} back into
  * {@link DynamicBattleAxesMod#createBattleAxe(BattleAxeMaterial)}) would
- * fail {@link #noBattleAxeCarriesAnAttackAttributeModifier()} -- that test
- * calls {@code createBattleAxe} itself, the exact factory
- * {@code registerBattleAxes()} registers, not a separate item of its own.
+ * fail {@link #noBattleAxeCarriesAnAttackAttributeModifier()}.
  *
- * <p>{@code DeferredItem.get()} is NOT used here: it requires the NeoForge
- * registry event to have fired, which never happens outside a running game,
- * so it would throw in a plain unit test. {@link #everyRegisteredItemIdMatchesItsMaterial()}
- * instead checks the {@code DeferredItem}'s stored id, which is safe
- * unbound.
+ * <p>With {@code neoForge.unitTest.enable()} (build.gradle), this test
+ * class runs in a bootstrapped NeoForge environment with this mod actually
+ * loaded, so the real {@code RegisterEvent} has fired and
+ * {@code DeferredItem.get()} returns the real production-registered item --
+ * so these tests read exactly what registration produced, not a second,
+ * separately-constructed item. (A plain, un-bootstrapped JUnit run would
+ * instead throw on {@code .get()}; it would ALSO throw constructing a new
+ * {@code Item} subclass directly once the real mod's registry event has run
+ * and frozen the item registry -- {@code Item}'s constructor creates an
+ * intrusive registry holder, which is only legal before that freeze.)
  */
 class DynamicBattleAxesModTest {
 
@@ -42,11 +45,10 @@ class DynamicBattleAxesModTest {
 
     @Test
     void noBattleAxeCarriesAnAttackAttributeModifier() {
-        for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
-            BattleAxeItem item = DynamicBattleAxesMod.createBattleAxe(material);
-            ItemAttributeModifiers modifiers = item.components().get(DataComponents.ATTRIBUTE_MODIFIERS);
+        DynamicBattleAxesMod.BATTLE_AXES.forEach((material, deferredItem) -> {
+            ItemAttributeModifiers modifiers = deferredItem.get().components().get(DataComponents.ATTRIBUTE_MODIFIERS);
             assertTrue(modifiers != null && modifiers.modifiers().isEmpty(),
                     material.name() + " must carry no combat attribute modifiers (none are enacted by MINECRAFT-294)");
-        }
+        });
     }
 }
