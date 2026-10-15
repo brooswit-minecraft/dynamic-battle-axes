@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "equipment",
+  "pattern": ["XX", "X#", " #"],
+  "key": {
+    "X": { "tag": "minecraft:planks" },
+    "#": { "item": "minecraft:stick" }
+  },
+  "result": { "id": "dynamicbattleaxes:wood_battle_axe" }
+}
