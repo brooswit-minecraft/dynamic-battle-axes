@@ -10,12 +10,22 @@ Registration and obtainable recipes for seven battle-axe items (wood, stone,
 copper, iron, gold, diamond, netherite) — see
 `BattleAxeMaterial`/`BattleAxeItem`/`BattleAxeTiers` under
 `src/main/java/io/github/brooswitminecraft/dynamicbattleaxes/`. Each is a
-plain `AxeItem` with no combat-specific overrides: no sweep arc, no
-PvP/friendly-fire/team/protection semantics, and no new combat-balance
-decisions — the per-material attack damage/speed numbers reuse vanilla's own
-existing per-tier axe values verbatim (copper, which vanilla has no axe or
-sword for, uses a non-binding stone/iron interpolation). All of that is
-explicitly out of scope here; see MINECRAFT-294/MINECRAFT-285.
+plain `AxeItem` with no combat-specific overrides and no attack-damage or
+attack-speed modifier at all (registration never calls
+`AxeItem.createAttributes`) — no sweep arc, no PvP/friendly-fire/team/
+protection semantics, and no combat-balance decision enacted anywhere. The
+copper tier's one combat-relevant field, `attackDamageBonus`, is 0 (no
+bonus); its non-combat fields (mining speed, durability, enchantment value)
+interpolate between stone and iron, since `Tier` requires some value for
+those regardless of combat scope.
+
+`BattleAxeMaterial.sameMaterialSwordDamage()`/`proposedReach()` are
+NON-BINDING evidence for a future balance task, not inputs to registration:
+vanilla's own same-material sword damage where one exists (empty for
+copper — no vanilla copper sword exists), and reach (always empty — no
+established battle-axe-reach convention was found, left an open unknown
+rather than guessed). All of combat balance is explicitly out of scope
+here; see MINECRAFT-294/MINECRAFT-285.
 
 Six materials craft with a shaped recipe mirroring vanilla's own axe shape
 (`XX`/`X#`/` #`); netherite upgrades from the diamond battle axe via a

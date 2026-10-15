@@ -6,23 +6,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import net.minecraft.core.component.DataComponents;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.component.ItemAttributeModifiers;
 
 /**
  * Registration coverage, and the review requirement this exists to pin down
  * going forward: none of the seven battle axes carry a combat attack-damage
  * or attack-speed modifier. Regressing this (e.g. a future change that adds
- * {@code .attributes(...)} back into {@link DynamicBattleAxesMod#registerBattleAxes})
- * would fail {@link #noBattleAxeCarriesAnAttackAttributeModifier()}.
+ * {@code .attributes(...)} back into
+ * {@link DynamicBattleAxesMod#createBattleAxe(BattleAxeMaterial)}) would
+ * fail {@link #noBattleAxeCarriesAnAttackAttributeModifier()} -- that test
+ * calls {@code createBattleAxe} itself, the exact factory
+ * {@code registerBattleAxes()} registers, not a separate item of its own.
  *
  * <p>{@code DeferredItem.get()} is NOT used here: it requires the NeoForge
  * registry event to have fired, which never happens outside a running game,
- * so it would throw in a plain unit test. These tests instead check the
- * {@code DeferredItem}'s stored id (safe unbound) and construct a
- * {@code BattleAxeItem} directly with the same arguments
- * {@link DynamicBattleAxesMod#registerBattleAxes()} uses, to inspect what
- * registration would actually produce.
+ * so it would throw in a plain unit test. {@link #everyRegisteredItemIdMatchesItsMaterial()}
+ * instead checks the {@code DeferredItem}'s stored id, which is safe
+ * unbound.
  */
 class DynamicBattleAxesModTest {
 
@@ -43,7 +43,7 @@ class DynamicBattleAxesModTest {
     @Test
     void noBattleAxeCarriesAnAttackAttributeModifier() {
         for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
-            Item item = new BattleAxeItem(material.tier(), new Item.Properties());
+            BattleAxeItem item = DynamicBattleAxesMod.createBattleAxe(material);
             ItemAttributeModifiers modifiers = item.components().get(DataComponents.ATTRIBUTE_MODIFIERS);
             assertTrue(modifiers != null && modifiers.modifiers().isEmpty(),
                     material.name() + " must carry no combat attribute modifiers (none are enacted by MINECRAFT-294)");
