@@ -6,35 +6,30 @@ NeoForge 1.21.1, Java 21. Mod ID: `dynamicbattleaxes`. MIT licensed.
 
 ## Current state
 
-Registration and obtainable recipes for seven battle-axe items (wood, stone,
-copper, iron, gold, diamond, netherite) — see
-`BattleAxeMaterial`/`BattleAxeItem`/`BattleAxeTiers` under
-`src/main/java/io/github/brooswitminecraft/dynamicbattleaxes/`. Each is a
-plain `AxeItem` with no combat-specific overrides and no attack-damage or
-attack-speed modifier at all (registration never calls
-`AxeItem.createAttributes`) — no sweep arc, no PvP/friendly-fire/team/
-protection semantics, and no combat-balance decision enacted anywhere. The
-copper tier's one combat-relevant field, `attackDamageBonus`, is 0 (no
-bonus); its non-combat fields (mining speed, durability, enchantment value)
-interpolate between stone and iron, since `Tier` requires some value for
-those regardless of combat scope.
+Seven-material battle-axe weapon (wood, stone, copper, iron, gold, diamond,
+netherite) — a frontline, crowd-clearing weapon. See
+`BattleAxeMaterial`/`BattleAxeItem`/`BattleAxeTiers`/`BattleAxeCombat` under
+`src/main/java/io/github/brooswitminecraft/dynamicbattleaxes/`.
 
-`BattleAxeMaterial.sameMaterialSwordDamage()`/`proposedReach()` are
-NON-BINDING evidence for a future balance task, not inputs to registration:
-vanilla's own same-material sword damage where one exists (empty for
-copper — no vanilla copper sword exists), and reach (always empty — no
-established battle-axe-reach convention was found, left an open unknown
-rather than guessed). All of combat balance is explicitly out of scope
-here; see MINECRAFT-294/MINECRAFT-285.
+- **180-degree arc**: every attack also hits every living entity within
+  reach in front of the attacker (`BattleAxeCombat`), not just the single
+  hit-scanned target, through the exact same vanilla attack path/protections
+  (pvp rule, scoreboard friendly fire, invulnerability) a direct hit would
+  use — no new bypass. See MINECRAFT-258's decision comment.
+- **Balance**: each battle-axe does 1 more total damage than the
+  same-material sword (copper interpolates stone/iron: 5.5), attacks 0.4
+  slower, and reaches 0.5 further — via the item's real
+  `ItemAttributeModifiers` (`BattleAxeItem.createAttributes`).
+- **Models**: each material has its own real MagicaVoxel `.vox` model
+  (`src/main/resources/assets/dynamicbattleaxes/vox/`, see
+  `docs/battle-axe-model.md`), loaded individually through the shared
+  `magicavoxel-loader` v0.1.3 library at common setup and rendered
+  in-hand/in-inventory by a custom item renderer
+  (`client/BattleAxeItemRenderer`).
 
 Six materials craft with a shaped recipe mirroring vanilla's own axe shape
 (`XX`/`X#`/` #`); netherite upgrades from the diamond battle axe via a
 smithing-table transform, mirroring vanilla's own netherite tool upgrades.
-
-Intentionally not included (hard exclusions for this ticket): item
-models/textures, MagicaVoxel models or asset packs, and any combat
-balance/behavior beyond what's needed for the item to exist and function as
-a tool.
 
 ## Building
 

@@ -3,7 +3,6 @@ package io.github.brooswitminecraft.dynamicbattleaxes;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -40,13 +39,6 @@ class BattleAxeMaterialTest {
     }
 
     @Test
-    void copperTierHasNoCombatAttackDamageBonus() {
-        // The only Tier field that feeds combat math; must stay neutral since
-        // MINECRAFT-294 enacts no combat balance for any material.
-        assertEquals(0.0F, BattleAxeTiers.COPPER.getAttackDamageBonus());
-    }
-
-    @Test
     void sameMaterialSwordDamageMatchesVanillaForMaterialsThatHaveOne() {
         assertEquals(4, BattleAxeMaterial.WOOD.sameMaterialSwordDamage().getAsInt());
         assertEquals(5, BattleAxeMaterial.STONE.sameMaterialSwordDamage().getAsInt());
@@ -62,9 +54,26 @@ class BattleAxeMaterialTest {
     }
 
     @Test
-    void reachIsAnUnstatedUnknownForEveryMaterial() {
+    void copperBaselineIsTheMINECRAFT258InterpolationOfStoneAndIron() {
+        // MINECRAFT-258 decision: (stone=5 + iron=6) / 2, since vanilla has no copper sword.
+        assertEquals(5.5F, BattleAxeMaterial.COPPER.sameMaterialSwordDamageBaseline(), 1.0E-6);
+    }
+
+    @Test
+    void nonCopperBaselineMatchesItsVanillaSameMaterialSwordDamageExactly() {
         for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
-            assertTrue(material.proposedReach().isEmpty(), material.name());
+            if (material == BattleAxeMaterial.COPPER) {
+                continue;
+            }
+            assertEquals(material.sameMaterialSwordDamage().getAsInt(), material.sameMaterialSwordDamageBaseline(), 1.0E-6, material.name());
+        }
+    }
+
+    @Test
+    void attackDamageModifierEqualsTheSameMaterialSwordBaseline() {
+        // So that total axe damage (vanilla base 1 + this modifier) is exactly 1 higher than the sword baseline.
+        for (BattleAxeMaterial material : BattleAxeMaterial.values()) {
+            assertEquals(material.sameMaterialSwordDamageBaseline(), material.attackDamageModifier(), 1.0E-6, material.name());
         }
     }
 }
