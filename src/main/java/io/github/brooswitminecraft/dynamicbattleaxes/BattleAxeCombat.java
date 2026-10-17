@@ -32,20 +32,50 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
  * exact same {@link AttackEntityEvent}) a direct hit on that target would
  * have gone through, so every existing check (the {@code pvp} game rule,
  * scoreboard {@code friendlyFire}, invulnerability, other mods' listeners)
- * applies identically. {@link #inArcSweep} exists only to stop that
+ * applies identically. {@link #IN_ARC_SWEEP} exists only to stop that
  * re-invocation from recursively sweeping again for each secondary target;
  * it is not a protection check of its own.
+ *
+ * <p>Known limitation (recorded, not a defect to silently reopen): a swing
+ * whose crosshair lands on a block never evaluates the arc -- only a direct
+ * entity hit ({@link #onAttackEntity}) or a swing at true empty air
+ * ({@link #onAirSwing}) does. {@code PlayerInteractEvent.LeftClickBlock}
+ * also fires on both logical sides (same hazard {@link #onAttackEntity}'s
+ * level-side guard exists for below), and a battle-axe is a plain
+ * {@code AxeItem} for which that event is legitimate mining input, so
+ * wiring a third payload off it was judged higher-risk than it is worth
+ * for this version. Brooswit confirms later whether this should change.
  */
 @EventBusSubscriber(modid = DynamicBattleAxesMod.MODID)
 public final class BattleAxeCombat {
     /**
      * Prevents a secondary {@code Player#attack} call below from itself
      * triggering another arc sweep (that call fires the very same
-     * {@link AttackEntityEvent} this class listens to). Not thread-shared
-     * state: both entry points always run on the server tick thread that is
-     * processing the attacking player's input/packet.
+     * {@link AttackEntityEvent} this class listens to). A {@code ThreadLocal}
+     * -- not a shared static boolean -- because {@link #onAttackEntity} is
+     * NOT confined to the server tick thread: {@code AttackEntityEvent}
+     * fires on both logical sides (vanilla's client-side prediction calls
+     * {@code Player#attack} too), so in single-player/LAN the client thread
+     * and the integrated-server thread can each be inside this class at the
+     * same time, for the same swing, on the one JVM-wide static event bus.
+     * A shared static here previously let one thread's guard hide the
+     * other's real work from it entirely (see {@link #onAttackEntity}'s own
+     * guard, which removes the client thread from this picture in the first
+     * place -- this field is the second, independent half of that fix:
+     * even if some future change re-admits concurrent callers, each thread
+     * still only ever sees and mutates its own value).
      */
-    private static boolean inArcSweep = false;
+    private static final ThreadLocal<Boolean> IN_ARC_SWEEP = ThreadLocal.withInitial(() -> false);
+
+    /** Test-only seam onto {@link #IN_ARC_SWEEP}: see {@link BattleAxeCombatTest} for why this needs no live entity/thread/world to verify thread-confinement. */
+    static boolean isInArcSweepOnThisThread() {
+        return IN_ARC_SWEEP.get();
+    }
+
+    /** Test-only seam onto {@link #IN_ARC_SWEEP}; see {@link #isInArcSweepOnThisThread}. */
+    static void setInArcSweepOnThisThread(boolean value) {
+        IN_ARC_SWEEP.set(value);
+    }
 
     /**
      * {@code LivingEntity.attackStrengthTicker} (protected, declared on
@@ -69,10 +99,20 @@ public final class BattleAxeCombat {
 
     @SubscribeEvent
     public static void onAttackEntity(AttackEntityEvent event) {
-        if (inArcSweep) {
+        Player attacker = event.getEntity();
+        // AttackEntityEvent fires on BOTH logical sides (vanilla's client-side prediction also
+        // calls Player#attack locally) -- this class only has a real server/world to sweep
+        // against on the server, and running the sweep client-side too would reflectively mutate
+        // the client's own attackStrengthTicker and re-invoke Player#attack there for client-
+        // predicted knockback/particles/sound on entities the server may never actually hit. Must
+        // come before the IN_ARC_SWEEP check below, not after: that guard is per-thread, so it
+        // does nothing to stop the client thread from independently running this whole method.
+        if (attacker.level().isClientSide()) {
             return;
         }
-        Player attacker = event.getEntity();
+        if (IN_ARC_SWEEP.get()) {
+            return;
+        }
         if (!(attacker.getMainHandItem().getItem() instanceof BattleAxeItem)) {
             return;
         }
@@ -81,7 +121,7 @@ public final class BattleAxeCombat {
         if (arcTargets.isEmpty()) {
             return;
         }
-        inArcSweep = true;
+        IN_ARC_SWEEP.set(true);
         try {
             // restoreOriginalAfter=true: vanilla's own Player#attack call that is still running
             // underneath this event handler continues right after it returns, computes the
@@ -91,7 +131,7 @@ public final class BattleAxeCombat {
             sweep(() -> attackStrengthTicker(attacker), value -> setAttackStrengthTicker(attacker, value),
                     target -> target == primaryTarget || target == attacker, attacker::attack, arcTargets, true);
         } finally {
-            inArcSweep = false;
+            IN_ARC_SWEEP.set(false);
         }
     }
 
@@ -107,8 +147,11 @@ public final class BattleAxeCombat {
      * sends no payload; it fires {@code AttackEntityEvent} instead, client
      * and server) or "found nothing" (this payload) for a given swing,
      * never both -- so no shared re-entrancy guard between the two is
-     * needed, only {@link #inArcSweep} against this method's own
-     * {@code attack} calls recursing into {@link #onAttackEntity}.
+     * needed, only {@link #IN_ARC_SWEEP} against this method's own
+     * {@code attack} calls recursing into {@link #onAttackEntity} (this
+     * payload is only ever handled on the server, via
+     * {@code IPayloadContext#enqueueWork}, so unlike that method there is
+     * no client-side firing of this entry point to guard against).
      *
      * <p>Unlike {@link #onAttackEntity}, there is no outer vanilla
      * {@code Player#attack} call left running underneath this handler to
@@ -131,12 +174,12 @@ public final class BattleAxeCombat {
             return;
         }
         List<LivingEntity> arcTargets = entitiesInForwardArc(attacker, reach(attacker));
-        inArcSweep = true;
+        IN_ARC_SWEEP.set(true);
         try {
             sweep(() -> attackStrengthTicker(attacker), value -> setAttackStrengthTicker(attacker, value),
                     target -> target == attacker, attacker::attack, arcTargets, false);
         } finally {
-            inArcSweep = false;
+            IN_ARC_SWEEP.set(false);
         }
         setAttackStrengthTicker(attacker, 0);
     }

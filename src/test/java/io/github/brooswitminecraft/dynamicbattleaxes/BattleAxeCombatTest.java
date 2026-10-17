@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.Test;
 
@@ -178,5 +180,47 @@ class BattleAxeCombatTest {
         ticker[0] = 0;
         assertEquals(List.of(), attacked, "the excluded candidate must never be attacked");
         assertEquals(0, ticker[0], "the charge must still be spent even though nobody was eligible");
+    }
+
+    /**
+     * Regression for the independent review's P1: {@code AttackEntityEvent}
+     * fires on both logical sides, so in single-player the client thread
+     * and the integrated-server thread can each be inside
+     * {@link BattleAxeCombat#onAttackEntity} for the same swing. A shared
+     * static re-entrancy guard let one thread's "I'm already sweeping" hide
+     * the other thread's real work from it; a {@code ThreadLocal} must not.
+     * No live entity/world needed to prove the guard itself is
+     * thread-confined -- two real threads suffice.
+     */
+    @Test
+    void arcSweepGuardIsConfinedToEachThreadIndependently() throws InterruptedException {
+        CountDownLatch otherThreadSetItsOwnFlag = new CountDownLatch(1);
+        CountDownLatch mainThreadCheckedWhileOtherWasSet = new CountDownLatch(1);
+        AtomicBoolean mainThreadSawItsOwnFlagAsUnset = new AtomicBoolean(false);
+        AtomicBoolean otherThreadSawItsOwnFlagAsSet = new AtomicBoolean(false);
+
+        Thread other = new Thread(() -> {
+            BattleAxeCombat.setInArcSweepOnThisThread(true);
+            otherThreadSawItsOwnFlagAsSet.set(BattleAxeCombat.isInArcSweepOnThisThread());
+            otherThreadSetItsOwnFlag.countDown();
+            await(mainThreadCheckedWhileOtherWasSet);
+            BattleAxeCombat.setInArcSweepOnThisThread(false);
+        });
+        other.start();
+
+        await(otherThreadSetItsOwnFlag);
+        // This (main) thread never set its own flag: the other thread setting its must not leak here.
+        mainThreadSawItsOwnFlagAsUnset.set(!BattleAxeCombat.isInArcSweepOnThisThread());
+        mainThreadCheckedWhileOtherWasSet.countDown();
+        other.join();
+
+        assertTrue(otherThreadSawItsOwnFlagAsSet.get(), "the other thread must see the value it just set");
+        assertTrue(mainThreadSawItsOwnFlagAsUnset.get(), "this thread must not see the other thread's concurrently-set flag");
+    }
+
+    private static void await(CountDownLatch latch) throws InterruptedException {
+        if (!latch.await(5, java.util.concurrent.TimeUnit.SECONDS)) {
+            throw new AssertionError("Timed out waiting for the other thread");
+        }
     }
 }
