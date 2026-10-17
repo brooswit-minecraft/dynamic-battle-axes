@@ -23,3 +23,10 @@ description='''Seven-material battle-axe weapons.'''
     versionRange="${minecraft_version_range}"
     ordering="NONE"
     side="BOTH"
+
+[[dependencies.${mod_id}]]
+    modId="magicavoxelloader"
+    type="required"
+    versionRange="[0.1.2,)"
+    ordering="AFTER"
+    side="BOTH"

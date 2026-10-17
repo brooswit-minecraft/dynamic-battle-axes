@@ -21,6 +21,46 @@ sourceSets.main.resources {
     exclude("src/generated/**/.cache")
 }
 
+// Keep each authored voxel source reviewable while packaging the binary .vox resource (MINECRAFT-258).
+def generatedVox = layout.buildDirectory.dir('generated/vox-resources')
+def battleAxeMaterials = ['wood', 'stone', 'copper', 'iron', 'gold', 'diamond', 'netherite']
+// Resolved to plain, config-cache-safe File objects now (at configuration time); doLast below
+// must not call back into `layout`/`project` itself, only use these already-resolved values.
+def battleAxeVoxSources = battleAxeMaterials.collectEntries { material ->
+    [(material): layout.projectDirectory.file("src/main/resources/assets/${mod_id}/vox/${material}_battle_axe.vox.hex").asFile]
+}
+def battleAxeVoxOutputDir = generatedVox.map { it.dir("assets/${mod_id}/vox") }
+def materializeBattleAxeVox = tasks.register('materializeBattleAxeVox') {
+    battleAxeVoxSources.values().each { inputs.file(it) }
+    outputs.dir(battleAxeVoxOutputDir)
+    doLast {
+        def outDir = battleAxeVoxOutputDir.get().asFile
+        battleAxeVoxSources.each { material, source ->
+            def hex = source.text.replaceAll('[^0-9A-Fa-f]', '')
+            def out = new File(outDir, "${material}_battle_axe.vox")
+            out.parentFile.mkdirs()
+            out.bytes = java.util.HexFormat.of().parseHex(hex)
+        }
+    }
+}
+sourceSets.main.resources.srcDir(generatedVox)
+tasks.named('processResources') { dependsOn materializeBattleAxeVox }
+tasks.named('jar') { dependsOn materializeBattleAxeVox }
+
+// The shared loader release is vendored from the official release asset and hash-verified (MINECRAFT-258).
+def magicVoxelLoaderJar = layout.projectDirectory.file("libs/magicavoxel-loader-${project.magicavoxel_loader_version}.jar")
+def magicVoxelLoaderSha256 = project.magicavoxel_loader_sha256
+tasks.register('verifyMagicVoxelLoader') {
+    inputs.file(magicVoxelLoaderJar)
+    doLast {
+        def digest = java.security.MessageDigest.getInstance("SHA-256")
+        def actual = digest.digest(magicVoxelLoaderJar.asFile.bytes).encodeHex().toString()
+        if (actual != magicVoxelLoaderSha256) {
+            throw new GradleException("magicavoxel-loader ${project.magicavoxel_loader_version} sha256 mismatch: ${actual}")
+        }
+    }
+}
+
 base {
     archivesName = mod_id
 }
@@ -87,6 +127,7 @@ neoForge {
 }
 
 dependencies {
+    implementation files(magicVoxelLoaderJar).builtBy("verifyMagicVoxelLoader")
     testImplementation platform("org.junit:junit-bom:5.11.4")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher"

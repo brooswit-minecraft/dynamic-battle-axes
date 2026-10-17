@@ -18,11 +18,13 @@ import net.neoforged.neoforge.common.SimpleTier;
  * regardless; interpolating between {@link Tiers#STONE} and
  * {@link Tiers#IRON} -- the two neighboring vanilla tiers copper
  * conventionally sits between -- is the minimal, convention-following
- * choice, and is NON-BINDING. {@code attackDamageBonus} is a combat value,
- * so it is NOT interpolated/invented here: it is 0 (no bonus), matching
- * that MINECRAFT-294 does not enact combat balance for any material (see
- * {@link DynamicBattleAxesMod}, which never calls
- * {@code AxeItem.createAttributes} for any of the seven items).
+ * choice, and is NON-BINDING. {@code attackDamageBonus} stays 0 here
+ * (no bonus): it is {@link Tier}'s own attack-damage field, which vanilla's
+ * {@code SwordItem}/{@code AxeItem} read internally, but this mod does not
+ * -- MINECRAFT-258's actual combat balance is enacted through
+ * {@link BattleAxeItem#createAttributes}'s own explicit
+ * {@code ItemAttributeModifiers} instead (see {@link BattleAxeMaterial}),
+ * so this field being 0 is simply unused, not a scope hold.
  */
 final class BattleAxeTiers {
     static final Tier COPPER = new SimpleTier(
