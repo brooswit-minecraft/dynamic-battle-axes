@@ -11,6 +11,14 @@ bump: minor
 - Seven real MagicaVoxel `.vox` battle-axe models (one per material),
   loaded through the shared `magicavoxel-loader` v0.1.3 library at common
   setup and rendered in-hand/in-inventory via a custom item renderer.
+- The arc also triggers on a swing that hits no entity (not just a
+  directly-targeted attack), via a small client-to-server notice.
+- Every target in one swing (the directly-clicked one included) now
+  computes damage from that swing's original attack strength, instead of
+  later targets seeing a reset (weaker) value.
+- Sweep reach now reads the attacker's live `ENTITY_INTERACTION_RANGE`
+  attribute instead of a hardcoded constant, so it agrees with whatever
+  reach vanilla used to find the primary target.
 
 ### Changed
 - `BattleAxeMaterial`'s balance evidence (damage baseline) is now BINDING

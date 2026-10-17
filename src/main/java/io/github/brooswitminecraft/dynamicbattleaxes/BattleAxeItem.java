@@ -72,9 +72,4 @@ public class BattleAxeItem extends AxeItem {
                         EquipmentSlotGroup.MAINHAND)
                 .build();
     }
-
-    /** The weapon's actual reach, vanilla base (3.0) plus {@link #REACH_BONUS}, used by {@link BattleAxeCombat}'s arc check. */
-    static double reach() {
-        return 3.0 + REACH_BONUS;
-    }
 }

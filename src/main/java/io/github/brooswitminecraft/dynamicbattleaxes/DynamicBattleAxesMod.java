@@ -19,6 +19,8 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -65,7 +67,15 @@ public class DynamicBattleAxesMod {
         ITEMS.register(modEventBus);
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(this::loadBattleAxeVoxelModels);
+        modEventBus.addListener(this::registerPayloads);
         LOGGER.info("Dynamic Battle Axes loaded");
+    }
+
+    /** {@link BattleAxeAirSwingPayload}: client -> server "swung at empty air" notice (MINECRAFT-258). */
+    private void registerPayloads(RegisterPayloadHandlersEvent event) {
+        PayloadRegistrar registrar = event.registrar("1");
+        registrar.playToServer(BattleAxeAirSwingPayload.TYPE, BattleAxeAirSwingPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> BattleAxeCombat.onAirSwing(payload, context)));
     }
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
