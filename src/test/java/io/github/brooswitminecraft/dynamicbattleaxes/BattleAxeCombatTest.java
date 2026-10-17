@@ -70,8 +70,9 @@ class BattleAxeCombatTest {
 
     /**
      * {@link BattleAxeCombat#sweep} is generic precisely so these cases
-     * (review finding #1) need no live {@code LivingEntity}/world: a fake
-     * mutable ticker plus plain strings stand in for the real
+     * (review finding #1, and the follow-up finding on {@code onAirSwing}'s
+     * charge-consumption policy) need no live {@code LivingEntity}/world: a
+     * fake mutable ticker plus plain strings stand in for the real
      * attack-strength field and targets.
      */
     @Test
@@ -84,16 +85,26 @@ class BattleAxeCombatTest {
                     seenBeforeEachAttack.add(ticker[0]);
                     ticker[0] = 0;
                 },
-                List.of("a", "b", "c"));
+                List.of("a", "b", "c"), true);
         assertEquals(List.of(7, 7, 7), seenBeforeEachAttack, "every target must see the original strength, not a prior target's reset value");
     }
 
     @Test
-    void sweepRestoresTheOriginalTickerAfterTheLastTarget() {
+    void sweepWithRestoreEnabledRestoresTheOriginalTickerAfterTheLastTarget() {
         int[] ticker = {5};
         BattleAxeCombat.sweep(() -> ticker[0], value -> ticker[0] = value, target -> false,
-                target -> ticker[0] = 0, List.of("a", "b"));
-        assertEquals(5, ticker[0], "vanilla's own continuation of the primary hit must see the original strength too");
+                target -> ticker[0] = 0, List.of("a", "b"), true);
+        assertEquals(5, ticker[0], "onAttackEntity needs this: vanilla's own continuation of the primary hit must see the original strength too");
+    }
+
+    @Test
+    void sweepWithRestoreDisabledLeavesTheLastAttackCallsOwnResetInPlace() {
+        int[] ticker = {6};
+        List<Integer> seenBeforeEachAttack = new ArrayList<>();
+        BattleAxeCombat.sweep(() -> ticker[0], value -> ticker[0] = value, target -> false,
+                target -> { seenBeforeEachAttack.add(ticker[0]); ticker[0] = 0; }, List.of("a", "b"), false);
+        assertEquals(List.of(6, 6), seenBeforeEachAttack, "every target still sees the original strength within the one swing");
+        assertEquals(0, ticker[0], "onAirSwing needs this: with no outer vanilla call left to spend the charge, sweep must not re-restore it");
     }
 
     @Test
@@ -101,15 +112,15 @@ class BattleAxeCombatTest {
         int[] ticker = {3};
         List<String> attacked = new ArrayList<>();
         BattleAxeCombat.sweep(() -> ticker[0], value -> ticker[0] = value, target -> target.equals("skip"),
-                attacked::add, List.of("skip", "hit"));
+                attacked::add, List.of("skip", "hit"), true);
         assertEquals(List.of("hit"), attacked);
     }
 
     @Test
-    void sweepWithNoEligibleTargetsStillRestoresTheOriginalTicker() {
+    void sweepWithNoEligibleTargetsAndRestoreEnabledStillRestoresTheOriginalTicker() {
         int[] ticker = {9};
         BattleAxeCombat.sweep(() -> ticker[0], value -> ticker[0] = value, target -> true,
-                target -> ticker[0] = 0, List.of("skip"));
+                target -> ticker[0] = 0, List.of("skip"), true);
         assertEquals(9, ticker[0]);
     }
 
@@ -118,13 +129,54 @@ class BattleAxeCombatTest {
         int[] ticker = {4};
         List<Integer> forward = new ArrayList<>();
         BattleAxeCombat.sweep(() -> ticker[0], v -> ticker[0] = v, t -> false,
-                t -> { forward.add(ticker[0]); ticker[0] = 0; }, List.of("a", "b", "c"));
+                t -> { forward.add(ticker[0]); ticker[0] = 0; }, List.of("a", "b", "c"), true);
 
         ticker[0] = 4;
         List<Integer> reversed = new ArrayList<>();
         BattleAxeCombat.sweep(() -> ticker[0], v -> ticker[0] = v, t -> false,
-                t -> { reversed.add(ticker[0]); ticker[0] = 0; }, List.of("c", "b", "a"));
+                t -> { reversed.add(ticker[0]); ticker[0] = 0; }, List.of("c", "b", "a"), true);
 
         assertEquals(forward, reversed, "every target sees the original strength regardless of iteration order");
+    }
+
+    /**
+     * Models {@link BattleAxeCombat#onAirSwing}'s own policy (not exercised
+     * directly: it needs a live {@code ServerPlayer}/level) at the level
+     * {@code sweep} can be tested: a swing with {@code restoreOriginalAfter
+     * = false}, followed by the entry point's own single explicit zeroing
+     * of the ticker, exactly once per received payload -- including an
+     * empty swing (target list excludes everyone), so a second swing with
+     * no recovery ticks elapsed never again sees the first swing's full
+     * charge.
+     */
+    @Test
+    void twoSuccessiveAirSwingsWithoutRecoveryDoNotBothSeeFullCharge() {
+        int[] ticker = {6};
+
+        List<Integer> firstSwingSeen = new ArrayList<>();
+        BattleAxeCombat.sweep(() -> ticker[0], v -> ticker[0] = v, t -> false,
+                t -> firstSwingSeen.add(ticker[0]), List.of("x"), false);
+        ticker[0] = 0; // onAirSwing's own post-sweep consumption; no recovery ticks elapsed before the next swing.
+
+        List<Integer> secondSwingSeen = new ArrayList<>();
+        BattleAxeCombat.sweep(() -> ticker[0], v -> ticker[0] = v, t -> false,
+                t -> secondSwingSeen.add(ticker[0]), List.of("y"), false);
+        ticker[0] = 0;
+
+        assertEquals(List.of(6), firstSwingSeen);
+        assertEquals(List.of(0), secondSwingSeen, "second swing must not see the first swing's full charge again");
+    }
+
+    @Test
+    void airSwingStyleChargeConsumptionHappensEvenWhenNoTargetsAreEligible() {
+        int[] ticker = {8};
+        List<String> attacked = new ArrayList<>();
+        // Mirrors onAirSwing's own two-step shape: a sweep whose skip predicate excludes every
+        // candidate (the arc found nobody but the attacker), then the entry point's own single
+        // explicit zeroing -- which must still happen even though the loop body never ran.
+        BattleAxeCombat.sweep(() -> ticker[0], v -> ticker[0] = v, target -> true, attacked::add, List.of("onlyAttacker"), false);
+        ticker[0] = 0;
+        assertEquals(List.of(), attacked, "the excluded candidate must never be attacked");
+        assertEquals(0, ticker[0], "the charge must still be spent even though nobody was eligible");
     }
 }

@@ -83,8 +83,13 @@ public final class BattleAxeCombat {
         }
         inArcSweep = true;
         try {
+            // restoreOriginalAfter=true: vanilla's own Player#attack call that is still running
+            // underneath this event handler continues right after it returns, computes the
+            // primary target's damage from whatever the ticker holds then (must be the original
+            // value, not 0), and resets it to 0 itself at the very end of that call -- so this
+            // method must leave the original value in place for it to find, not consume it.
             sweep(() -> attackStrengthTicker(attacker), value -> setAttackStrengthTicker(attacker, value),
-                    target -> target == primaryTarget || target == attacker, attacker::attack, arcTargets);
+                    target -> target == primaryTarget || target == attacker, attacker::attack, arcTargets, true);
         } finally {
             inArcSweep = false;
         }
@@ -104,45 +109,58 @@ public final class BattleAxeCombat {
      * never both -- so no shared re-entrancy guard between the two is
      * needed, only {@link #inArcSweep} against this method's own
      * {@code attack} calls recursing into {@link #onAttackEntity}.
+     *
+     * <p>Unlike {@link #onAttackEntity}, there is no outer vanilla
+     * {@code Player#attack} call left running underneath this handler to
+     * consume the swing's charge afterward -- this payload IS the entire
+     * swing. So {@code sweep} runs with {@code restoreOriginalAfter=false}
+     * and this method explicitly zeroes the ticker itself exactly once
+     * after it returns, deliberately including a swing that found nobody
+     * eligible at all: a battle-axe swing spends its charge the moment it
+     * is thrown, whether or not anything was in the arc, the same as a
+     * direct hit's charge is always spent via vanilla's own reset.
      */
     static void onAirSwing(BattleAxeAirSwingPayload payload, IPayloadContext context) {
         if (!(context.player() instanceof ServerPlayer attacker)) {
+            return;
+        }
+        if (!attacker.isAlive() || attacker.isSpectator()) {
             return;
         }
         if (!(attacker.getMainHandItem().getItem() instanceof BattleAxeItem)) {
             return;
         }
         List<LivingEntity> arcTargets = entitiesInForwardArc(attacker, reach(attacker));
-        if (arcTargets.isEmpty()) {
-            return;
-        }
         inArcSweep = true;
         try {
             sweep(() -> attackStrengthTicker(attacker), value -> setAttackStrengthTicker(attacker, value),
-                    target -> target == attacker, attacker::attack, arcTargets);
+                    target -> target == attacker, attacker::attack, arcTargets, false);
         } finally {
             inArcSweep = false;
         }
+        setAttackStrengthTicker(attacker, 0);
     }
 
     /**
      * Attacks every target not excluded by {@code shouldSkip}, forcing
      * {@code setTicker} back to the value {@code getTicker} returned before
-     * the FIRST call before every individual {@code attack} -- and once
-     * more after the loop. Without this, {@code Player#attack} resets the
-     * real attack-strength ticker to 0 at the end of every invocation
-     * (vanilla always does this, hit or miss), so the first secondary
-     * consumes the whole swing's charge and every target after it --
-     * including, for {@link #onAttackEntity}, the directly-clicked primary
-     * target, whose own damage vanilla computes from whatever the ticker
-     * holds right after this event handler returns -- would otherwise
-     * compute weaker damage than the swing that was actually thrown,
-     * depending on iteration order. Generic and side-effect-free apart from
-     * the supplied callbacks, so it is unit-testable with fake targets and
-     * no live entity/world ({@link BattleAxeCombatTest}).
+     * the FIRST call before every individual {@code attack} call. Without
+     * this, {@code Player#attack} resets the real attack-strength ticker to
+     * 0 at the end of every invocation (vanilla always does this, hit or
+     * miss), so the first target consumes the whole swing's charge and
+     * every target after it would otherwise compute weaker damage than the
+     * swing that was actually thrown, depending on iteration order.
+     *
+     * <p>{@code restoreOriginalAfter} controls only what happens once the
+     * loop ends, i.e. who is responsible for the swing's charge actually
+     * being spent -- see the two call sites' own javadoc for which value
+     * each needs and why; this method has no opinion of its own on whether
+     * the charge should end up consumed. Generic and side-effect-free apart
+     * from the supplied callbacks, so it is unit-testable with fake targets
+     * and no live entity/world ({@link BattleAxeCombatTest}).
      */
     static <T> void sweep(IntSupplier getTicker, IntConsumer setTicker, Predicate<T> shouldSkip,
-            Consumer<T> attack, List<T> targets) {
+            Consumer<T> attack, List<T> targets, boolean restoreOriginalAfter) {
         int original = getTicker.getAsInt();
         for (T target : targets) {
             if (shouldSkip.test(target)) {
@@ -151,7 +169,9 @@ public final class BattleAxeCombat {
             setTicker.accept(original);
             attack.accept(target);
         }
-        setTicker.accept(original);
+        if (restoreOriginalAfter) {
+            setTicker.accept(original);
+        }
     }
 
     private static int attackStrengthTicker(LivingEntity entity) {

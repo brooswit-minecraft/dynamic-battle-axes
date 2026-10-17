@@ -19,6 +19,9 @@ bump: minor
 - Sweep reach now reads the attacker's live `ENTITY_INTERACTION_RANGE`
   attribute instead of a hardcoded constant, so it agrees with whatever
   reach vanilla used to find the primary target.
+- An air swing now spends its attack-strength charge exactly once per
+  swing (including one that found nobody eligible), instead of leaving the
+  original charge fully available afterward.
 
 ### Changed
 - `BattleAxeMaterial`'s balance evidence (damage baseline) is now BINDING
