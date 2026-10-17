@@ -203,7 +203,11 @@ class BattleAxeCombatTest {
             BattleAxeCombat.setInArcSweepOnThisThread(true);
             otherThreadSawItsOwnFlagAsSet.set(BattleAxeCombat.isInArcSweepOnThisThread());
             otherThreadSetItsOwnFlag.countDown();
-            await(mainThreadCheckedWhileOtherWasSet);
+            try {
+                await(mainThreadCheckedWhileOtherWasSet);
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
             BattleAxeCombat.setInArcSweepOnThisThread(false);
         });
         other.start();
