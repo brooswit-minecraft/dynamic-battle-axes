@@ -24,17 +24,20 @@ sourceSets.main.resources {
 // Keep each authored voxel source reviewable while packaging the binary .vox resource (MINECRAFT-258).
 def generatedVox = layout.buildDirectory.dir('generated/vox-resources')
 def battleAxeMaterials = ['wood', 'stone', 'copper', 'iron', 'gold', 'diamond', 'netherite']
+// Resolved to plain, config-cache-safe File objects now (at configuration time); doLast below
+// must not call back into `layout`/`project` itself, only use these already-resolved values.
+def battleAxeVoxSources = battleAxeMaterials.collectEntries { material ->
+    [(material): layout.projectDirectory.file("src/main/resources/assets/${mod_id}/vox/${material}_battle_axe.vox.hex").asFile]
+}
+def battleAxeVoxOutputDir = generatedVox.map { it.dir("assets/${mod_id}/vox") }
 def materializeBattleAxeVox = tasks.register('materializeBattleAxeVox') {
-    battleAxeMaterials.each { material ->
-        def source = layout.projectDirectory.file("src/main/resources/assets/${mod_id}/vox/${material}_battle_axe.vox.hex")
-        inputs.file(source)
-    }
-    outputs.dir(generatedVox.map { it.dir("assets/${mod_id}/vox") })
+    battleAxeVoxSources.values().each { inputs.file(it) }
+    outputs.dir(battleAxeVoxOutputDir)
     doLast {
-        battleAxeMaterials.each { material ->
-            def source = layout.projectDirectory.file("src/main/resources/assets/${mod_id}/vox/${material}_battle_axe.vox.hex").asFile
+        def outDir = battleAxeVoxOutputDir.get().asFile
+        battleAxeVoxSources.each { material, source ->
             def hex = source.text.replaceAll('[^0-9A-Fa-f]', '')
-            def out = generatedVox.get().file("assets/${mod_id}/vox/${material}_battle_axe.vox").asFile
+            def out = new File(outDir, "${material}_battle_axe.vox")
             out.parentFile.mkdirs()
             out.bytes = java.util.HexFormat.of().parseHex(hex)
         }
